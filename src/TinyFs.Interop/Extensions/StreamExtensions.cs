@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -30,6 +29,26 @@ namespace TinyFs.Interop.Extensions
             }
 
             return result;
+        }
+        
+        public static byte[] ReadBytes(this Stream stream, int count, int offset)
+        {
+            var result = new byte[count];
+            stream.Position = offset;
+            stream.Read(result, 0, count);
+            return result;
+        }
+
+        public static void WriteObject<T>(this Stream stream, T obj, int offset) where T : struct
+        {
+            var byteArr = obj.ToByteArray();
+            stream.WriteBytes(byteArr, offset);
+        }
+
+        public static void WriteBytes(this Stream stream, byte[] bytes, int offset)
+        {
+            stream.Position = offset;
+            stream.Write(bytes, 0, bytes.Length);
         }
     }
 }

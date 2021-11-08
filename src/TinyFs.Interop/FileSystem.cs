@@ -15,17 +15,13 @@ namespace TinyFs.Interop
         private readonly int _descriptorsCount;
 
         private readonly int _fsSize;
-
-        // Active blocks
-        private readonly int _totalBlocks;
         private FileDescriptor Root => GetFileDescriptor(0);
         private Block RootBlock => GetBlock(0);
         private readonly List<ushort> _openFilesDescriptorsIds = new List<ushort>();
 
-        public FileSystem(FileStream fsFileStream, int fsSize) : base(fsFileStream)
+        public FileSystem(FileStream fsFileStream) : base(fsFileStream)
         {
-            _fsSize = fsSize;
-            _totalBlocks = fsSize / FileSystemSettings.BlockSize;
+            _fsSize = FileSystemSettings.BlocksCount * FileSystemSettings.BlockSize;
             _descriptorsCount = fsFileStream.ReadStruct<short>(FileSystemSettings.DescriptorsCountOffset);
         }
 
@@ -37,7 +33,7 @@ namespace TinyFs.Interop
         public override void SetBlock(int index, Block block)
         {
             var offset = SizeHelper.GetBlocksOffset(_descriptorsCount) * index;
-            WriteObject(block, offset);
+            FsFileStream.WriteObject(block, offset);
         }
 
         public override FileMap GetFileMap(int index)
@@ -48,7 +44,7 @@ namespace TinyFs.Interop
         public override void SetFileMap(int index, FileMap fileMap)
         {
             var offset = SizeHelper.GetBlocksOffset(_descriptorsCount) * index;
-            WriteObject(fileMap, offset);
+            FsFileStream.WriteObject(fileMap, offset);
         }
 
         public override FileDescriptor GetFileDescriptor(ushort id)
@@ -60,12 +56,12 @@ namespace TinyFs.Interop
         public override void SetFileDescriptor(ushort id, FileDescriptor fileDescriptor)
         {
             var offset = FileSystemSettings.DescriptorsOffset + SizeHelper.GetStructureSize<FileDescriptor>() * id;
-            WriteObject(fileDescriptor, offset);
+            FsFileStream.WriteObject(fileDescriptor, offset);
         }
 
         public override BitArray GetBitmask(int offset, int bytes = 16)
         {
-            var byteArray = ReadBytes(bytes, offset + FileSystemSettings.BitMapOffset);
+            var byteArray = FsFileStream.ReadBytes(bytes, offset + FileSystemSettings.BitMapOffset);
             return new BitArray(byteArray);
         }
 
@@ -73,7 +69,7 @@ namespace TinyFs.Interop
         {
             var buff = new byte[OpHelper.DivWithRoundUp(bitArray.Count, 8)];
             bitArray.CopyTo(buff, 0);
-            WriteBytes(buff, offset + FileSystemSettings.BitMapOffset);
+            FsFileStream.WriteBytes(buff, offset + FileSystemSettings.BitMapOffset);
         }
 
         public override void SetBitFree(int index)
@@ -218,29 +214,9 @@ namespace TinyFs.Interop
             }
         }
 
-        private byte[] ReadBytes(int count, int offset)
-        {
-            var result = new byte[count];
-            FsFileStream.Position = offset;
-            FsFileStream.Read(result, 0, count);
-            return result;
-        }
-
-        private void WriteObject<T>(T obj, int offset) where T : struct
-        {
-            var byteArr = obj.ToByteArray();
-            WriteBytes(byteArr, offset);
-        }
-
-        private void WriteBytes(byte[] bytes, int offset)
-        {
-            FsFileStream.Position = offset;
-            FsFileStream.Write(bytes, 0, bytes.Length);
-        }
-
         private ushort GetFirstFreeDescriptor()
         {
-            for (ushort i = 0; i < _totalBlocks; i++)
+            for (ushort i = 0; i < _descriptorsCount; i++)
             {
                 var descriptor = GetFileDescriptor(i);
                 if (descriptor.FileDescriptorType == FileDescriptorType.Unused)
@@ -255,7 +231,7 @@ namespace TinyFs.Interop
         private int GetFirstFreeBlock()
         {
             var takeBytes = 16;
-            for (var i = 0; i < FileSystemSettings.BlocksCount / 8 / 16; i++)
+            for (short i = 0; i < FileSystemSettings.BlocksCount / 8 / 16; i++)
             {
                 var bitmask = GetBitmask(i * takeBytes, takeBytes);
                 var firstFree = bitmask.GetIndexOfFirst(FileSystemSettings.BitmaskFreeBit);
