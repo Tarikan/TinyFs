@@ -22,5 +22,8 @@
         public const int DefaultBlocksInDescriptor = 4;
 
         public const ushort DefaultBlocksSize = DefaultBlocksInDescriptor * BlockSize;
+
+        // for truncate optimization
+        public const ushort NullDescriptor = ushort.MaxValue;
     }
 }

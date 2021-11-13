@@ -8,7 +8,7 @@ namespace TinyFs.Interop.Extensions
         {
             for (short i = 0; i < bitArray.Count; i++)
             {
-                if (bitArray[i])
+                if (bitArray[i] == element)
                 {
                     return i;
                 }

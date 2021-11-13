@@ -14,7 +14,7 @@ namespace TinyFs.Interop.Extensions
 
             IntPtr ptr = Marshal.AllocHGlobal(len);
 
-            Marshal.StructureToPtr(structure, ptr, true);
+            Marshal.StructureToPtr(structure, ptr, false);
 
             Marshal.Copy(ptr, arr, 0, len);
 

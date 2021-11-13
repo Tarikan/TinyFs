@@ -15,14 +15,8 @@ namespace TinyFs.Domain.Models
 
         public byte References; // 1
 
-        // public ushort Block1Index;
-        //
-        // public ushort Block2Index;
-        //
-        // public ushort Block3Index;
-
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = FileSystemSettings.DefaultBlocksInDescriptor)]
-        public ushort[] Blocks; // 6
+        public ushort[] Blocks; // 8
 
         public ushort MapIndex; // 2
     }

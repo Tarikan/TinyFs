@@ -1,9 +1,11 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using TinyFs.Domain.Models;
 
 namespace TinyFs.Interop
 {
-    public interface IFileSystemInterop
+    public interface IFileSystemInterop : IDisposable
     {
         Block GetBlock(int index);
 
@@ -25,14 +27,22 @@ namespace TinyFs.Interop
 
         void UnsetBitFree(int index);
 
-        void CreateFile(byte[] file, string filename);
-        
-        byte[] ReadFile(string filename);
-        
-        void DeleteFile(string filename);
+        void CreateFile(string filename);
 
-        void OpenFile(string filename);
+        void WriteToFile(byte[] file, int fd, int offset, ushort size);
+        
+        List<DirectoryEntry> DirectoryList();
 
-        void CloseFile(string filename);
+        byte[] ReadFile(int fd, int offset, ushort size);
+        
+        void UnlinkFile(string filename);
+
+        void LinkFile(string existingFileName, string linkName);
+
+        FileDescriptor Truncate(string filename, ushort size);
+
+        int OpenFile(string filename);
+
+        void CloseFile(int fd);
     }
 }

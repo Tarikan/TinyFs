@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using TinyFs.Domain.Models;
 
@@ -33,16 +34,23 @@ namespace TinyFs.Interop
         public abstract void SetBitFree(int index);
 
         public abstract void UnsetBitFree(int index);
+        public abstract void CreateFile(string filename);
 
-        public abstract void CreateFile(byte[] file, string filename);
+        public abstract void WriteToFile(byte[] file, int fd, int offset, ushort size);
 
-        public abstract byte[] ReadFile(string filename);
+        public abstract byte[] ReadFile(int fd, int offset, ushort size);
 
-        public abstract void DeleteFile(string filename);
-        
-        public abstract void OpenFile(string filename);
+        public abstract void UnlinkFile(string filename);
 
-        public abstract void CloseFile(string filename);
+        public abstract void LinkFile(string existingFileName, string linkName);
+
+        public abstract FileDescriptor Truncate(string filename, ushort size);
+
+        public abstract List<DirectoryEntry> DirectoryList();
+
+        public abstract int OpenFile(string filename);
+
+        public abstract void CloseFile(int fd);
 
         public void Dispose()
         {
