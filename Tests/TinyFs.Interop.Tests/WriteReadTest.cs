@@ -110,7 +110,7 @@ namespace TinyFs.Interop.Tests
 
         [Theory]
         [InlineData(597, 913)]
-        public void TestLink(int offset, ushort value)
+        public void Link(int offset, ushort value)
         {
             var file = _loremBytes.Skip(offset).Take(value).ToArray();
             _fs.CreateFile("test");
@@ -128,7 +128,23 @@ namespace TinyFs.Interop.Tests
         
         [Theory]
         [InlineData(597, 913)]
-        public void TestMount(int offset, ushort value)
+        public void Unlink(int offset, ushort value)
+        {
+            var file = _loremBytes.Skip(offset).Take(value).ToArray();
+            _fs.CreateFile("test");
+            _fs.Truncate("test", Convert.ToUInt16(offset + value));
+            var fd = _fs.OpenFile("test");
+            _fs.WriteToFile(file, fd, offset, Convert.ToUInt16(file.Length));
+            _fs.CloseFile(fd);
+            _fs.LinkFile("test", "testLink");
+            _fs.UnlinkFile("testLink");
+            var ls = _fs.DirectoryList();
+            Assert.True(!ls.Any(de => de.Name == "testLink" && de.IsValid));
+        }
+        
+        [Theory]
+        [InlineData(597, 913)]
+        public void Mount(int offset, ushort value)
         {
             var file = _loremBytes.Skip(offset).Take(value).ToArray();
             _fs.CreateFile("test");
@@ -146,7 +162,7 @@ namespace TinyFs.Interop.Tests
         }
 
         [Fact]
-        public void FStatTest()
+        public void FStat()
         {
             var offset = 597;
             ushort value = 913;
@@ -167,7 +183,7 @@ namespace TinyFs.Interop.Tests
         }
 
         [Fact]
-        public void LsTest()
+        public void Ls()
         {
             _fs.CreateFile("file1");
             _fs.CreateFile("file2");
@@ -177,7 +193,17 @@ namespace TinyFs.Interop.Tests
                         ls[1].Name== "file2" &&
                         ls[1].IsValid);
         }
-        
+
+        [Fact]
+        public void TruncateReduceSize()
+        {
+            _fs.CreateFile("file");
+            _fs.Truncate("file", 9876);
+            _fs.Truncate("file", 6543);
+            var descriptor = _fs.GetFileDescriptor(1);
+            Assert.True(descriptor.FileSize == 6543);
+        }
+
         // for debug
         [Fact]
         public void Testing()

@@ -343,8 +343,11 @@ namespace TinyFs.Interop
 
         public override void UnlinkFile(string filename)
         {
-            var descriptorId = FileLookUp(filename);
+            ushort descriptorId;
+            ushort directoryId;
+            (descriptorId, directoryId) = FileLookUpWithDirectory(filename);
             var descriptor = GetFileDescriptor(descriptorId);
+            RemoveLinkFromDirectory(GetFileDescriptor(directoryId), filename);
             if (descriptor.References > 1 ||
                 _openedFiles.ContainsValue(descriptorId))
             {
@@ -371,12 +374,6 @@ namespace TinyFs.Interop
             var descriptor = GetFileDescriptor(descriptorId);
             var oldSize = descriptor.FileSize;
             descriptor.FileSize = size;
-            if (oldSize > size)
-            {
-                SetFileDescriptor(descriptorId, descriptor);
-                return descriptor;
-            }
-
             var oldBlocksCount = OpHelper.DivWithRoundUp(oldSize, FileSystemSettings.BlockSize);
             var newBlocksCount = OpHelper.DivWithRoundUp(size, FileSystemSettings.BlockSize);
             var oldMapsCount = OpHelper.DivWithRoundUp(
@@ -385,6 +382,17 @@ namespace TinyFs.Interop
             var newMapsCount = OpHelper.DivWithRoundUp(
                 newBlocksCount - FileSystemSettings.DefaultBlocksInDescriptor,
                 FileSystemSettings.RefsInFileMap);
+            if (oldSize > size)
+            {
+                var blocksToFree = oldBlocksCount - newBlocksCount;
+                var lastBlockInMapIndex = (newBlocksCount - FileSystemSettings.DefaultBlocksInDescriptor)
+                    % FileSystemSettings.RefsInFileMap;
+                var lastMapId = GetNthFileMap(descriptorId, newMapsCount - 1);
+                var blocks = ReadNBlocksAndMaps(lastMapId, lastBlockInMapIndex, Convert.ToUInt16(lastMapId));
+                FreeBlocks(blocks);
+                SetFileDescriptor(descriptorId, descriptor);
+                return descriptor;
+            }
 
             if (oldBlocksCount < FileSystemSettings.DefaultBlocksInDescriptor)
             {
@@ -574,6 +582,30 @@ namespace TinyFs.Interop
             SetFileDescriptor(directoryDescriptor.Id, directoryDescriptor);
             SetBlock(directoryDescriptor.Blocks[0], directoryBlock);
         }
+        
+        private void RemoveLinkFromDirectory(FileDescriptor directoryDescriptor, string filename)
+        {
+            if (directoryDescriptor.FileDescriptorType != FileDescriptorType.Directory)
+            {
+                throw new Exception("Internal error, directory descriptor");
+            }
+
+            var directoryEntries =
+                FsFileStream.ReadStructs<DirectoryEntry>(
+                        GetBlockOffset(directoryDescriptor.Blocks[0]),
+                        directoryDescriptor.FileSize / SizeHelper.GetStructureSize<DirectoryEntry>())
+                    .ToList();
+            var deId = directoryEntries
+                .Select((de, index) => (de, index))
+                .Single(de => de.de.Name == filename)
+                .index;
+            var newDe = directoryEntries[deId];
+            newDe.IsValid = false;
+            directoryDescriptor.FileSize -= Convert.ToUInt16(SizeHelper.GetStructureSize<DirectoryEntry>());
+            FsFileStream.WriteObject(newDe, GetBlockOffset(directoryDescriptor.Blocks[0]) + SizeHelper.GetStructureSize<DirectoryEntry>() * deId);
+            
+            SetFileDescriptor(directoryDescriptor.Id, directoryDescriptor);
+        }
 
         private byte[] ReadFileMapEntries(ushort fileMapIndex, int offset, ushort fileSize, int? totalBlocks = null)
         {
@@ -648,6 +680,22 @@ namespace TinyFs.Interop
                     .ReadStructs<DirectoryEntry>(SizeHelper.GetBlocksOffset(_descriptorsCount), filesCount)
                     .Single(de => de.Name == fileName)
                     .FileDescriptorId;
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"File with name {fileName} not found");
+            }
+        }
+        
+        private ( ushort fileId, ushort directoryId ) FileLookUpWithDirectory(string fileName)
+        {
+            var filesCount = Root.FileSize / SizeHelper.GetStructureSize<DirectoryEntry>();
+            try
+            {
+                return new ValueTuple<ushort, ushort>(FsFileStream
+                    .ReadStructs<DirectoryEntry>(SizeHelper.GetBlocksOffset(_descriptorsCount), filesCount)
+                    .Single(de => de.Name == fileName)
+                    .FileDescriptorId, 0);
             }
             catch (Exception e)
             {
@@ -832,6 +880,36 @@ namespace TinyFs.Interop
             }
 
             return result;
+        }
+
+        private List<ushort> ReadNBlocksAndMaps(ushort mapId, int offset, ushort count)
+        {
+            if (offset > FileSystemSettings.RefsInFileMap)
+            {
+                throw new Exception($"offset is bigger than count of refs in fileMap");
+            }
+
+            var result = new List<ushort>(count);
+            var map = GetFileMap(mapId);
+            if (FileSystemSettings.RefsInFileMap - offset < count)
+            {
+                result.AddRange(map.Indexes.Skip(offset));
+                result.Add(map.NextMapIndex);
+                result.AddRange(ReadNBlocksAndMaps(map.NextMapIndex, 0,
+                    Convert.ToUInt16(count - (FileSystemSettings.RefsInFileMap - offset))));
+                return result;
+            }
+
+            result.AddRange(map.Indexes.Skip(offset).Take(count));
+            return result;
+        }
+
+        private void FreeBlocks(List<ushort> blockIds)
+        {
+            foreach (var blockId in blockIds)
+            {
+                SetBitFree(blockId);
+            }
         }
     }
 }
