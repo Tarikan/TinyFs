@@ -20,12 +20,11 @@ namespace TinyFs.Interop
 
             var file = File.Open(fsName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
             file.Flush();
-            
+
             file.WriteObject(descriptorsCount, 0);
             var bitArray = new BitArray(
                 FileSystemSettings.BlocksCount,
                 FileSystemSettings.BitmaskFreeBit);
-            bitArray[0] = !FileSystemSettings.BitmaskFreeBit;
             var buffer = new byte[OpHelper.DivWithRoundUp(FileSystemSettings.BlocksCount, 8)];
             bitArray.CopyTo(buffer, 0);
             file.WriteBytes(buffer, FileSystemSettings.BitMapOffset);
@@ -44,11 +43,14 @@ namespace TinyFs.Interop
                 References = 1,
                 Blocks = new ushort[]
                 {
-                    0, 0, 0, 0,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
                 },
                 MapIndex = 0
             };
-            
+
             file.WriteObject(root, FileSystemSettings.DescriptorsOffset);
 
             return new FileSystem(file);

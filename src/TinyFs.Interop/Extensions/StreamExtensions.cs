@@ -11,6 +11,9 @@ namespace TinyFs.Interop.Extensions
         {
             stream.Position = offset;
             var sz = Marshal.SizeOf(typeof(T));
+#if DEBUG
+            Console.WriteLine($"Reading {sz} bytes from offset {offset}");
+#endif
             var buffer = new byte[sz];
             stream.Read(buffer, 0, sz);
             var pinnedBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);

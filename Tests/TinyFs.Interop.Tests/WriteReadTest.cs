@@ -5,6 +5,8 @@ using TinyFs.Domain.Enums;
 using Xunit;
 using Xunit.Abstractions;
 using System.Text.Json;
+using TinyFs.Domain.Models;
+using TinyFs.Interop.Extensions;
 
 namespace TinyFs.Interop.Tests
 {
@@ -66,6 +68,7 @@ namespace TinyFs.Interop.Tests
         [InlineData(5)]
         [InlineData(7)]
         [InlineData(10)]
+        [InlineData(60)]
         public void MultipleFiles(int filesCount)
         {
             var random = new Random();
@@ -208,17 +211,15 @@ namespace TinyFs.Interop.Tests
         [Fact]
         public void Testing()
         {
-            var offset = 597;
-            ushort value = 913;
-            var file = _loremBytes.Skip(offset).Take(value).ToArray();
-            var fileText = System.Text.Encoding.Default.GetString(file);
             _fs.CreateFile("test");
-            _fs.Truncate("test", Convert.ToUInt16(offset + value));
-            var fd = _fs.OpenFile("test");
-            _fs.WriteToFile(file, fd, offset, Convert.ToUInt16(file.Length));
-            var res = _fs.ReadFile(fd, offset, Convert.ToUInt16(file.Length));
-            var resText = System.Text.Encoding.Default.GetString(res);
-            Assert.True(res.SequenceEqual(file));
+            var de = new DirectoryEntry
+            {
+                Name = "test",
+                IsValid = true,
+                FileDescriptorId = 1
+            }.ToByteArray();
+            var ls = _fs.DirectoryList();
+            Assert.True(true);
         }
     }
 }
