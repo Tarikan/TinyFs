@@ -270,13 +270,10 @@ namespace TinyFs.Interop
             SetFileDescriptor(descriptorId, descriptor);
         }
 
-        public override void CreateFile(string filename)
+        public override void CreateFile(string filename, ushort cwd = 0)
         {
-            if (filename == "file-150")
-            {
-                Console.WriteLine();
-            }
-
+            var dir = PathHelper.GetDirectoryByPath(filename);
+            var directoryDescriptor = LookUp(dir, cwd);
             var descriptorId = GetFirstFreeDescriptor();
             var descriptor = new FileDescriptor
             {
@@ -288,7 +285,7 @@ namespace TinyFs.Interop
             };
 
             SetFileDescriptor(descriptorId, descriptor);
-            AddLinkToDirectory(Root.Id, filename, descriptorId);
+            AddLinkToDirectory(directoryDescriptor.Id, filename, descriptorId);
         }
 
         public override byte[] ReadFile(int fd, int offset, ushort size)
@@ -363,11 +360,12 @@ namespace TinyFs.Interop
             return ReadAllBlocks(blocks).Skip(bytesToSkip).Take(size).ToArray();
         }
 
-        public override void UnlinkFile(string filename)
+        public override void UnlinkFile(string filename, ushort cwd = 0)
         {
-            var descriptor = LookUp(filename);
-            var dirPath = filename[..filename.LastIndexOf(FileSystemSettings.Separator, StringComparison.Ordinal)];
-            var directory = LookUp(dirPath);
+            var descriptor = LookUp(filename, cwd);
+            // var dirPath = filename[..filename.LastIndexOf(FileSystemSettings.Separator, StringComparison.Ordinal)];
+            var dirPath = PathHelper.GetDirectoryByPath(filename);
+            var directory = LookUp(dirPath, cwd);
             RemoveLinkFromDirectory(GetFileDescriptor(directory.Id), PathHelper.GetFilenameByPath(filename));
             if (descriptor.References > 1 ||
                 _openedFiles.ContainsValue(descriptor.Id))
@@ -380,18 +378,18 @@ namespace TinyFs.Interop
             RemoveFileFromFs(descriptor.Id);
         }
 
-        public override void LinkFile(string existingFileName, string linkName)
+        public override void LinkFile(string existingFileName, string linkName, ushort cwd = 0)
         {
-            var descriptor = LookUp(existingFileName);
+            var descriptor = LookUp(existingFileName, cwd);
             var descriptorId = descriptor.Id;
             descriptor.References++;
             SetFileDescriptor(descriptorId, descriptor);
             AddLinkToDirectory(Root.Id, linkName, descriptorId);
         }
 
-        public override FileDescriptor Truncate(string filename, ushort size)
+        public override FileDescriptor Truncate(string filename, ushort size, ushort cwd = 0)
         {
-            var descriptor = LookUp(filename);
+            var descriptor = LookUp(filename, cwd);
             var descriptorId = descriptor.Id;
             var oldSize = descriptor.FileSize;
             descriptor.FileSize = size;
@@ -484,9 +482,9 @@ namespace TinyFs.Interop
             return descriptor;
         }
 
-        public override int OpenFile(string filename)
+        public override int OpenFile(string filename, ushort cwd = 0)
         {
-            var descriptor = LookUp(filename);
+            var descriptor = LookUp(filename, cwd);
             _openedFiles.Add(++_fd, descriptor.Id);
             return _fd;
         }
@@ -508,19 +506,53 @@ namespace TinyFs.Interop
             }
         }
 
-        public override void MakeDirectory(string directoryName)
+        public override void MakeDirectory(string directoryName, ushort cwd = 0)
         {
-            throw new NotImplementedException();
+            var parentDirPath = PathHelper.GetDirectoryByPath(directoryName);
+            var fileName = PathHelper.GetFilenameByPath(directoryName);
+            var parentDirDescriptor = LookUp(parentDirPath, cwd);
+            var descriptor = new FileDescriptor
+            {
+                Id = GetFirstFreeDescriptor(),
+                FileDescriptorType = FileDescriptorType.Directory,
+                FileSize = 0,
+                References = 1,
+                Blocks = new ushort[]
+                {
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                },
+                MapIndex = 0
+            };
+            SetFileDescriptor(descriptor.Id, descriptor);
+            AddLinkToDirectory(descriptor.Id, ".", descriptor.Id);
+            AddLinkToDirectory(descriptor.Id, "..", parentDirDescriptor.Id);
+            AddLinkToDirectory(parentDirDescriptor.Id, fileName, descriptor.Id);
         }
 
-        public override void RemoveDirectory(string directoryName)
+        public override void RemoveDirectory(string directoryName, ushort cwd = 0)
         {
-            throw new NotImplementedException();
-        }
+            var parentDirPath = PathHelper.GetDirectoryByPath(directoryName);
+            var fileName = PathHelper.GetFilenameByPath(directoryName);
+            var parentDirDescriptor = LookUp(parentDirPath, cwd);
+            var fileDescriptor = LookUp(fileName, cwd);
+            if (fileDescriptor.Id == Root.Id)
+            {
+                throw new Exception("cannot delete root");
+            }
 
-        public override void ChangeDirectory(string directoryName)
-        {
-            throw new NotImplementedException();
+            var directoryEntries = GetDirectoryEntries(fileDescriptor.Id).SelectMany(x => x);
+            if (directoryEntries.Any(
+                de => de.Name != FileSystemSettings.CurrentDirSymlink &&
+                      de.Name != FileSystemSettings.PrevDirSymlink &&
+                      de.IsValid))
+            {
+                throw new Exception("Directory is not empty");
+            }
+
+            UnlinkFile(fileName, cwd);
         }
 
         public override void CreateSymlink(string path, string payload, ushort cwd = 0)

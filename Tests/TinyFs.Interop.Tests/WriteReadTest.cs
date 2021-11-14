@@ -5,8 +5,6 @@ using TinyFs.Domain.Enums;
 using Xunit;
 using Xunit.Abstractions;
 using System.Text.Json;
-using TinyFs.Domain.Models;
-using TinyFs.Interop.Extensions;
 
 namespace TinyFs.Interop.Tests
 {
@@ -232,19 +230,28 @@ namespace TinyFs.Interop.Tests
             Assert.True(_loremBytes.Take(100).SequenceEqual(bytes));
         }
 
-        // for debug
         [Fact]
-        public void Testing()
+        public void MkDir()
         {
-            _fs.CreateFile("test");
-            var de = new DirectoryEntry
-            {
-                Name = "test",
-                IsValid = true,
-                FileDescriptorId = 1
-            }.ToByteArray();
+            _fs.MakeDirectory("test");
+            var currentDir = _fs.LookUp("/test");
+            _fs.MakeDirectory("inner_test", currentDir.Id);
+            currentDir = _fs.LookUp("inner_test", currentDir.Id);
+            _fs.CreateFile("testfile", currentDir.Id);
+            _fs.Truncate("./testfile", 100, currentDir.Id);
+            var fd = _fs.OpenFile("./testfile", currentDir.Id);
+            _fs.WriteToFile(_loremBytes.Take(100).ToArray(), fd, 0, 100);
+            var res = _fs.ReadFile(fd, 0, 100);
+            Assert.True(res.SequenceEqual(_loremBytes.Take(100)));
+        }
+        
+        [Fact]
+        public void RmDir()
+        {
+            _fs.MakeDirectory("test");
+            _fs.RemoveDirectory("test");
             var ls = _fs.DirectoryList();
-            Assert.True(true);
+            Assert.DoesNotContain(ls, de => de.Name == "test" && de.IsValid);
         }
     }
 }
