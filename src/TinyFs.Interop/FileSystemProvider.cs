@@ -35,23 +35,23 @@ namespace TinyFs.Interop
                 Enumerable.Repeat(zero, SizeHelper.GetStructureSize<FileDescriptor>() * descriptorsCount).ToArray();
             file.WriteBytes(descriptorsSpace, FileSystemSettings.DescriptorsOffset);
 
-            var root = new FileDescriptor
-            {
-                Id = 0,
-                FileDescriptorType = FileDescriptorType.Directory,
-                FileSize = 0,
-                References = 1,
-                Blocks = new ushort[]
-                {
-                    FileSystemSettings.NullDescriptor,
-                    FileSystemSettings.NullDescriptor,
-                    FileSystemSettings.NullDescriptor,
-                    FileSystemSettings.NullDescriptor,
-                },
-                MapIndex = 0
-            };
-
-            file.WriteObject(root, FileSystemSettings.DescriptorsOffset);
+            // var root = new FileDescriptor
+            // {
+            //     Id = 0,
+            //     FileDescriptorType = FileDescriptorType.Directory,
+            //     FileSize = 0,
+            //     References = 1,
+            //     Blocks = new ushort[]
+            //     {
+            //         FileSystemSettings.NullDescriptor,
+            //         FileSystemSettings.NullDescriptor,
+            //         FileSystemSettings.NullDescriptor,
+            //         FileSystemSettings.NullDescriptor,
+            //     },
+            //     MapIndex = 0
+            // };
+            //
+            // file.WriteObject(root, FileSystemSettings.DescriptorsOffset);
 
             return new FileSystem(file);
         }

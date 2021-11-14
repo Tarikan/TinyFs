@@ -68,9 +68,9 @@ namespace TinyFs.Interop.Tests
         [InlineData(5)]
         [InlineData(7)]
         [InlineData(10)]
-        [InlineData(60)]
-        [InlineData(150)]
-        [InlineData(200)]
+        //[InlineData(60)]
+        //[InlineData(150)]
+        //[InlineData(200)]
         public void MultipleFiles(int filesCount)
         {
             var random = new Random();
@@ -142,7 +142,7 @@ namespace TinyFs.Interop.Tests
             _fs.WriteToFile(file, fd, offset, Convert.ToUInt16(file.Length));
             _fs.CloseFile(fd);
             _fs.LinkFile("test", "testLink");
-            _fs.UnlinkFile("testLink");
+            _fs.UnlinkFile("/testLink");
             var ls = _fs.DirectoryList();
             Assert.True(!ls.Any(de => de.Name == "testLink" && de.IsValid));
         }
@@ -177,12 +177,12 @@ namespace TinyFs.Interop.Tests
             var fd = _fs.OpenFile("test");
             _fs.WriteToFile(file, fd, offset, Convert.ToUInt16(file.Length));
             _fs.CloseFile(fd);
-            var descriptor = _fs.GetFileDescriptor(1);
+            var descriptor = _fs.GetFileDescriptor(2);
             var json = JsonSerializer.Serialize(
                 descriptor,
                 new JsonSerializerOptions { WriteIndented = true, IncludeFields = true});
             _testOutputHelper.WriteLine(json);
-            Assert.True(descriptor.Id == 1 &&
+            Assert.True(descriptor.Id == 2 &&
                         descriptor.References == 1 &&
                         descriptor.FileDescriptorType == FileDescriptorType.File);
         }
@@ -193,10 +193,10 @@ namespace TinyFs.Interop.Tests
             _fs.CreateFile("file1");
             _fs.CreateFile("file2");
             var ls = _fs.DirectoryList();
-            Assert.True(ls[0].Name == "file1" &&
-                        ls[0].IsValid &&
-                        ls[1].Name== "file2" &&
-                        ls[1].IsValid);
+            Assert.True(ls[1].Name == "file1" &&
+                        ls[1].IsValid &&
+                        ls[2].Name== "file2" &&
+                        ls[2].IsValid);
         }
 
         [Fact]
@@ -205,8 +205,31 @@ namespace TinyFs.Interop.Tests
             _fs.CreateFile("file");
             _fs.Truncate("file", 9876);
             _fs.Truncate("file", 6543);
-            var descriptor = _fs.GetFileDescriptor(1);
+            var descriptor = _fs.GetFileDescriptor(2);
             Assert.True(descriptor.FileSize == 6543);
+        }
+
+        [Fact]
+        public void LookUp()
+        {
+            _fs.CreateFile("test");
+            var descriptor = _fs.LookUp("test");
+            Assert.True(descriptor.Id == 2);
+        }
+
+        [Fact]
+        public void CreateSymlink()
+        {
+            _fs.CreateFile("test");
+            _fs.Truncate("test", 100);
+            var fd = _fs.OpenFile("test");
+            _fs.WriteToFile(_loremBytes.Take(100).ToArray(), fd, 0, 100);
+            _fs.CloseFile(fd);
+            _fs.CreateSymlink("symlink", "test");
+            var descriptor = _fs.LookUp("/symlink");
+            fd = _fs.OpenFile("/symlink");
+            var bytes = _fs.ReadFile(fd, 0, 100);
+            Assert.True(_loremBytes.Take(100).SequenceEqual(bytes));
         }
 
         // for debug

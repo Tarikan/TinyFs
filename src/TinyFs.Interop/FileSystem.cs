@@ -42,6 +42,10 @@ namespace TinyFs.Interop
         {
             _fsSize = FileSystemSettings.BlocksCount * FileSystemSettings.BlockSize;
             _descriptorsCount = fsFileStream.ReadStruct<short>(FileSystemSettings.DescriptorsCountOffset);
+            if (Root.FileDescriptorType == FileDescriptorType.Unused)
+            {
+                Init();
+            }
         }
 
         #region Setters
@@ -173,6 +177,11 @@ namespace TinyFs.Interop
             }
 
             var descriptorId = _openedFiles[fd];
+            WriteToFile(descriptorId, file, offset, size);
+        }
+
+        private void WriteToFile(ushort descriptorId, byte[] file, int offset, ushort size)
+        {
             var descriptor = GetFileDescriptor(descriptorId);
             if (descriptor.FileSize < offset + size)
             {
@@ -267,6 +276,7 @@ namespace TinyFs.Interop
             {
                 Console.WriteLine();
             }
+
             var descriptorId = GetFirstFreeDescriptor();
             var descriptor = new FileDescriptor
             {
@@ -289,6 +299,11 @@ namespace TinyFs.Interop
             }
 
             var descriptorId = _openedFiles[fd];
+            return ReadFile(descriptorId, offset, size);
+        }
+
+        private byte[] ReadFile(ushort descriptorId, int offset, ushort size)
+        {
             var descriptor = GetFileDescriptor(descriptorId);
             if (descriptor.FileSize < offset + size)
             {
@@ -350,26 +365,25 @@ namespace TinyFs.Interop
 
         public override void UnlinkFile(string filename)
         {
-            ushort descriptorId;
-            ushort directoryId;
-            (descriptorId, directoryId) = FileLookUpWithDirectory(filename);
-            var descriptor = GetFileDescriptor(descriptorId);
-            RemoveLinkFromDirectory(GetFileDescriptor(directoryId), filename);
+            var descriptor = LookUp(filename);
+            var dirPath = filename[..filename.LastIndexOf(FileSystemSettings.Separator, StringComparison.Ordinal)];
+            var directory = LookUp(dirPath);
+            RemoveLinkFromDirectory(GetFileDescriptor(directory.Id), PathHelper.GetFilenameByPath(filename));
             if (descriptor.References > 1 ||
-                _openedFiles.ContainsValue(descriptorId))
+                _openedFiles.ContainsValue(descriptor.Id))
             {
                 descriptor.References -= 1;
-                SetFileDescriptor(descriptorId, descriptor);
+                SetFileDescriptor(descriptor.Id, descriptor);
                 return;
             }
 
-            RemoveFileFromFs(descriptorId);
+            RemoveFileFromFs(descriptor.Id);
         }
 
         public override void LinkFile(string existingFileName, string linkName)
         {
-            var descriptorId = FileLookUp(existingFileName);
-            var descriptor = GetFileDescriptor(descriptorId);
+            var descriptor = LookUp(existingFileName);
+            var descriptorId = descriptor.Id;
             descriptor.References++;
             SetFileDescriptor(descriptorId, descriptor);
             AddLinkToDirectory(Root.Id, linkName, descriptorId);
@@ -377,8 +391,8 @@ namespace TinyFs.Interop
 
         public override FileDescriptor Truncate(string filename, ushort size)
         {
-            var descriptorId = FileLookUp(filename);
-            var descriptor = GetFileDescriptor(descriptorId);
+            var descriptor = LookUp(filename);
+            var descriptorId = descriptor.Id;
             var oldSize = descriptor.FileSize;
             descriptor.FileSize = size;
             var oldBlocksCount = OpHelper.DivWithRoundUp(oldSize, FileSystemSettings.BlockSize);
@@ -472,8 +486,8 @@ namespace TinyFs.Interop
 
         public override int OpenFile(string filename)
         {
-            var descriptor = FileLookUp(filename);
-            _openedFiles.Add(++_fd, descriptor);
+            var descriptor = LookUp(filename);
+            _openedFiles.Add(++_fd, descriptor.Id);
             return _fd;
         }
 
@@ -494,16 +508,131 @@ namespace TinyFs.Interop
             }
         }
 
-        public override List<DirectoryEntry> DirectoryList()
+        public override void MakeDirectory(string directoryName)
         {
-            var descriptor = Cwd;
-            // var blockId = descriptor.Blocks[0];
-            // var directoryEntries =
-            //     FsFileStream.ReadStructs<DirectoryEntry>(
-            //         GetBlockOffset(blockId),
-            //         descriptor.FileSize / SizeHelper.GetStructureSize<DirectoryEntry>());
-            var test = GetDirectoryEntries(0);
-            var directoryEntries = GetDirectoryEntries(0)
+            throw new NotImplementedException();
+        }
+
+        public override void RemoveDirectory(string directoryName)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void ChangeDirectory(string directoryName)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void CreateSymlink(string path, string payload, ushort cwd = 0)
+        {
+            var pathToDir = PathHelper.GetDirectoryByPath(path);
+            var fileName = PathHelper.GetFilenameByPath(path);
+            var dirDescriptor = LookUp(pathToDir, cwd);
+            if (dirDescriptor.FileDescriptorType != FileDescriptorType.Directory)
+            {
+                throw new Exception("Directory not found");
+            }
+
+            var descriptorId = GetFirstFreeDescriptor();
+
+            var fileDescriptor = new FileDescriptor
+            {
+                Id = descriptorId,
+                FileDescriptorType = FileDescriptorType.Symlink,
+                Blocks = new[]
+                {
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                },
+                References = 1,
+                FileSize = Convert.ToUInt16(payload.Length),
+                MapIndex = FileSystemSettings.NullDescriptor,
+            };
+            SetFileDescriptor(descriptorId, fileDescriptor);
+
+            AddLinkToDirectory(dirDescriptor.Id, fileName, fileDescriptor.Id);
+            WriteToFile(fileDescriptor.Id, Encoding.Default.GetBytes(payload), 0, Convert.ToUInt16(payload.Length));
+        }
+
+        public override FileDescriptor LookUp(string path,
+            ushort cwd = 0,
+            bool resolveSymlink = true,
+            int symlinkMaxCount = FileSystemSettings.MaxSymlinkInOneLookup)
+        {
+            if (path == FileSystemSettings.Separator)
+            {
+                return Root;
+            }
+
+            // remove trailing slash
+            if (path.EndsWith(FileSystemSettings.Separator))
+            {
+                path = path[..^1];
+            }
+
+            var directory = path.StartsWith(FileSystemSettings.Separator) ? Root : GetFileDescriptor(cwd);
+
+            if (path.StartsWith(FileSystemSettings.Separator))
+            {
+                path = path[1..];
+            }
+
+            if (path.Contains(FileSystemSettings.Separator))
+            {
+                var name = path[..path.IndexOf(FileSystemSettings.Separator, StringComparison.Ordinal)];
+                var continuePath = path[(path.IndexOf(FileSystemSettings.Separator, StringComparison.Ordinal) + 1)..];
+
+                var directoryEntries = GetDirectoryEntries(directory.Id);
+                var nextDir = directoryEntries.SelectMany(d => d)
+                    .First(d => d.Name == name);
+
+                var nextDirDescriptor = GetFileDescriptor(nextDir.FileDescriptorId);
+                if (nextDirDescriptor.FileDescriptorType == FileDescriptorType.Symlink)
+                {
+                    if (symlinkMaxCount == 0)
+                    {
+                        throw new Exception("Exceeded max symlink count");
+                    }
+
+                    var value = ReadFile(nextDirDescriptor.Id, 0, nextDirDescriptor.FileSize);
+                    var symlinkString = System.Text.Encoding.Default.GetString(value);
+                    continuePath = $"{symlinkString}/{continuePath}";
+                }
+
+                return LookUp(
+                    continuePath,
+                    nextDirDescriptor.Id,
+                    resolveSymlink,
+                    symlinkMaxCount - 1);
+            }
+            else
+            {
+                var name = path;
+                var directoryEntries = GetDirectoryEntries(directory.Id);
+                var file = directoryEntries.SelectMany(d => d)
+                    .First(d => d.Name == name);
+                var fileDescriptor = GetFileDescriptor(file.FileDescriptorId);
+                if (fileDescriptor.FileDescriptorType == FileDescriptorType.Symlink && resolveSymlink)
+                {
+                    var value = ReadFile(fileDescriptor.Id, 0, fileDescriptor.FileSize);
+                    var symlinkString = System.Text.Encoding.Default.GetString(value);
+
+                    return LookUp(
+                        symlinkString,
+                        cwd,
+                        true,
+                        symlinkMaxCount - 1);
+                }
+
+                return GetFileDescriptor(file.FileDescriptorId);
+            }
+        }
+
+        public override List<DirectoryEntry> DirectoryList(ushort directoryDescriptorId = 0)
+        {
+            var directoryEntries = GetDirectoryEntries(directoryDescriptorId)
                 .SelectMany(d => d)
                 .Where(d => d.IsValid);
             return directoryEntries.ToList();
@@ -568,7 +697,7 @@ namespace TinyFs.Interop
             {
                 throw new Exception("Internal error, directory descriptor");
             }
-            
+
             var info = GetFirstFreeDirectoryEntry(directoryDescriptorId);
             directoryDescriptor = GetFileDescriptor(directoryDescriptorId);
             var directoryEntry = new DirectoryEntry
@@ -583,6 +712,7 @@ namespace TinyFs.Interop
             {
                 blockId = GetFirstFreeBlockAndReserve();
             }
+
             directoryEntry.CopyTo(block.Data, info.dEntryId * SizeHelper.GetStructureSize<DirectoryEntry>());
             SetBlock(blockId, block);
         }
@@ -594,22 +724,31 @@ namespace TinyFs.Interop
                 throw new Exception("Internal error, directory descriptor");
             }
 
-            var directoryEntries =
-                FsFileStream.ReadStructs<DirectoryEntry>(
-                        GetBlockOffset(directoryDescriptor.Blocks[0]),
-                        directoryDescriptor.FileSize / SizeHelper.GetStructureSize<DirectoryEntry>())
-                    .ToList();
-            var deId = directoryEntries
-                .Select((de, index) => (de, index))
-                .Single(de => de.de.Name == filename)
-                .index;
-            var newDe = directoryEntries[deId];
-            newDe.IsValid = false;
-            directoryDescriptor.FileSize -= Convert.ToUInt16(SizeHelper.GetStructureSize<DirectoryEntry>());
-            FsFileStream.WriteObject(newDe,
-                GetBlockOffset(directoryDescriptor.Blocks[0]) + SizeHelper.GetStructureSize<DirectoryEntry>() * deId);
+            var (entry, blockId, result) = GetFirstDirectoryEntry(directoryDescriptor.Id, filename);
+            if (!result)
+            {
+                throw new Exception($"file with name {filename} not found");
+            }
 
-            SetFileDescriptor(directoryDescriptor.Id, directoryDescriptor);
+            var block = GetBlock(blockId);
+
+            var entries = FsFileStream
+                .ReadStructs<DirectoryEntry>(GetBlockOffset(blockId), _directoryEntriesInBlock)
+                .ToList();
+            var entryIndex = entries
+                .Select((entry, index) => (entry, index))
+                .First(tuple => tuple.entry.Name == filename)
+                .index;
+
+            var newEntry = new DirectoryEntry
+            {
+                Name = "file",
+                IsValid = false,
+                FileDescriptorId = 0
+            };
+            var byteArr = newEntry.ToByteArray();
+            byteArr.CopyTo(block.Data, entryIndex * SizeHelper.GetStructureSize<DirectoryEntry>());
+            SetBlock(blockId, block);
         }
 
         private byte[] ReadFileMapEntries(ushort fileMapIndex, int offset, ushort fileSize, int? totalBlocks = null)
@@ -674,21 +813,6 @@ namespace TinyFs.Interop
             }
 
             return result;
-        }
-
-        private ushort FileLookUp(string fileName)
-        {
-            if (fileName == "file-150")
-            {
-                Console.WriteLine();
-            }
-            var lookUpResult = GetFirstDirectoryEntry(Root.Id, fileName);
-            if (!lookUpResult.result)
-            {
-                throw new Exception($"File with name {fileName} not found");
-            }
-
-            return lookUpResult.entry.FileDescriptorId;
         }
 
         private ( ushort fileId, ushort directoryId ) FileLookUpWithDirectory(string fileName)
@@ -1042,8 +1166,9 @@ namespace TinyFs.Interop
             SetFileDescriptor(directoryDescriptorId, descriptor);
             return (newBlockId, 0);
         }
-        
-        private (DirectoryEntry entry, bool result) GetFirstDirectoryEntry(ushort directoryDescriptorId, string fileName)
+
+        private (DirectoryEntry entry, ushort blockId, bool result) GetFirstDirectoryEntry(ushort directoryDescriptorId,
+            string fileName)
         {
             var descriptor = GetFileDescriptor(directoryDescriptorId);
             var blocksToTake = descriptor.FileSize / FileSystemSettings.BlockSize;
@@ -1063,7 +1188,7 @@ namespace TinyFs.Interop
             {
                 var (foundEntry, result) = FindEntryInBlock(descriptorBlock, fileName);
                 if (!result) continue;
-                return (foundEntry, true);
+                return (foundEntry, descriptorBlock, true);
             }
 
             blocks.RemoveAll(_ => true);
@@ -1076,11 +1201,11 @@ namespace TinyFs.Interop
                 {
                     var (foundEntry, result) = FindEntryInBlock(mapBlock, fileName);
                     if (!result) continue;
-                    return (foundEntry, true);
+                    return (foundEntry, mapBlock, true);
                 }
             }
 
-            return (new DirectoryEntry(), false);
+            return (new DirectoryEntry(), 0, false);
         }
 
         private (ushort id, bool result) FindFreeEntryInBlock(ushort blockId)
@@ -1098,7 +1223,7 @@ namespace TinyFs.Interop
                 .index);
             return (entryIndex, true);
         }
-        
+
         private (DirectoryEntry entry, bool result) FindEntryInBlock(ushort blockId, string fileName)
         {
             var entries = FsFileStream
@@ -1113,6 +1238,48 @@ namespace TinyFs.Interop
                 .First(tuple => tuple.entry.Name == fileName)
                 .entry;
             return (entry, true);
+        }
+
+        private void Init()
+        {
+            var root = new FileDescriptor
+            {
+                Id = 0,
+                FileDescriptorType = FileDescriptorType.Directory,
+                FileSize = 0,
+                References = 1,
+                Blocks = new ushort[]
+                {
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                },
+                MapIndex = 0
+            };
+            SetFileDescriptor(root.Id, root);
+
+            var rootDirBlockId = GetFirstFreeBlockAndReserve();
+            var rootDirBlock = GetBlock(FileSystemSettings.NullDescriptor);
+            Encoding.Default.GetBytes(FileSystemSettings.Separator).CopyTo(rootDirBlock.Data, 0);
+            SetBlock(rootDirBlockId, rootDirBlock);
+            var rootDir = new FileDescriptor
+            {
+                Id = 1,
+                FileDescriptorType = FileDescriptorType.Symlink,
+                FileSize = Convert.ToUInt16(FileSystemSettings.CurrentDirSymlink.Length),
+                References = 1,
+                Blocks = new ushort[]
+                {
+                    rootDirBlockId,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                    FileSystemSettings.NullDescriptor,
+                },
+                MapIndex = 0
+            };
+            SetFileDescriptor(rootDir.Id, rootDir);
+            AddLinkToDirectory(0, FileSystemSettings.CurrentDirSymlink, 1);
         }
     }
 }

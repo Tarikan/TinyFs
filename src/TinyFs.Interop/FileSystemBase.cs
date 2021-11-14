@@ -46,11 +46,23 @@ namespace TinyFs.Interop
 
         public abstract FileDescriptor Truncate(string filename, ushort size);
 
-        public abstract List<DirectoryEntry> DirectoryList();
+        public abstract List<DirectoryEntry> DirectoryList(ushort directoryDescriptorId = 0);
 
         public abstract int OpenFile(string filename);
 
         public abstract void CloseFile(int fd);
+        public abstract void MakeDirectory(string directoryName);
+
+        public abstract void RemoveDirectory(string directoryName);
+
+        public abstract void ChangeDirectory(string directoryName);
+
+        public abstract void CreateSymlink(string path, string payload, ushort cwd = 0);
+
+        public abstract FileDescriptor LookUp(string path,
+            ushort cwd = 0,
+            bool resolveSymlink = true,
+            int symlinkMaxCount = FileSystemSettings.MaxSymlinkInOneLookup);
 
         public void Dispose()
         {

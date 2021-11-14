@@ -31,7 +31,7 @@ namespace TinyFs.Interop
 
         void WriteToFile(byte[] file, int fd, int offset, ushort size);
         
-        List<DirectoryEntry> DirectoryList();
+        List<DirectoryEntry> DirectoryList(ushort directoryDescriptorId = 0);
 
         byte[] ReadFile(int fd, int offset, ushort size);
         
@@ -44,5 +44,18 @@ namespace TinyFs.Interop
         int OpenFile(string filename);
 
         void CloseFile(int fd);
+
+        void MakeDirectory(string directoryName);
+
+        void RemoveDirectory(string directoryName);
+
+        void ChangeDirectory(string directoryName);
+
+        void CreateSymlink(string path, string payload, ushort cwd = 0);
+
+        FileDescriptor LookUp(string path,
+            ushort cwd = 0,
+            bool resolveSymlink = true,
+            int symlinkMaxCount = FileSystemSettings.MaxSymlinkInOneLookup);
     }
 }

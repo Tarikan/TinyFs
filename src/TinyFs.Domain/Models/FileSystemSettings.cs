@@ -25,5 +25,13 @@
 
         // for truncate optimization
         public const ushort NullDescriptor = ushort.MaxValue;
+
+        public const int MaxSymlinkInOneLookup = 255;
+
+        public const string Separator = "/";
+
+        public const string CurrentDirSymlink = ".";
+        
+        public const string PrevDirSymlink = "..";
     }
 }
