@@ -674,6 +674,10 @@ namespace TinyFs.Interop
 
         private ushort FileLookUp(string fileName)
         {
+            if (fileName == "file-120")
+            {
+                Console.WriteLine();
+            }
             var lookUpResult = GetFirstDirectoryEntry(Root.Id, fileName);
             if (!lookUpResult.result)
             {
@@ -993,15 +997,34 @@ namespace TinyFs.Interop
                 return (newBlockId, 0);
             }
 
-            var lastFileMapId = GetNthFileMap(directoryDescriptorId,
-                (blocksToTake - FileSystemSettings.DefaultBlocksInDescriptor) / FileSystemSettings.RefsInFileMap);
-            var lastFileMap = GetFileMap(lastFileMapId);
-            var newFileMapId = GetFirstFreeBlockAndReserve();
-            var newFileMap = GetFileMap(FileSystemSettings.NullDescriptor);
-            lastFileMap.NextMapIndex = newFileMapId;
+            ushort lastFileMapId;
+            FileMap lastFileMap;
+            ushort newFileMapId;
+            FileMap newFileMap;
+
+            if (descriptor.FileSize == FileSystemSettings.DefaultBlocksSize)
+            {
+                newFileMapId = GetFirstFreeBlockAndReserve();
+                newFileMap = GetFileMap(FileSystemSettings.NullDescriptor);
+                SetFileMap(newFileMapId, newFileMap);
+                descriptor.MapIndex = newFileMapId;
+                SetFileDescriptor(directoryDescriptorId, descriptor);
+            }
+            else
+            {
+                lastFileMapId = GetNthFileMap(directoryDescriptorId,
+                    (blocksToTake - FileSystemSettings.DefaultBlocksInDescriptor) / FileSystemSettings.RefsInFileMap);
+                lastFileMap = GetFileMap(lastFileMapId);
+                newFileMapId = GetFirstFreeBlockAndReserve();
+                newFileMap = GetFileMap(FileSystemSettings.NullDescriptor);
+                lastFileMap.NextMapIndex = newFileMapId;
+                SetFileMap(newFileMapId, newFileMap);
+                
+            }
+
+            newFileMap.Indexes[0] = newBlockId;
             SetFileMap(newFileMapId, newFileMap);
-            lastFileMap.Indexes[0] = newBlockId;
-            SetFileMap(newFileMapId, newFileMap);
+           
             descriptor.FileSize += FileSystemSettings.BlockSize;
             SetFileDescriptor(directoryDescriptorId, descriptor);
             return (newBlockId, 0);

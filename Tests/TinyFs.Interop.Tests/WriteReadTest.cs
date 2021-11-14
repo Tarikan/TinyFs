@@ -25,7 +25,7 @@ namespace TinyFs.Interop.Tests
             using var reader = new BinaryReader(file);
             _loremBytes = reader.ReadBytes(Convert.ToInt32(file.Length));
             _fileSystemProvider = new FileSystemProvider();
-            _fs = _fileSystemProvider.CreateNewFileSystem(FsName, 100);
+            _fs = _fileSystemProvider.CreateNewFileSystem(FsName, 300);
         }
 
         [Theory]
@@ -69,6 +69,7 @@ namespace TinyFs.Interop.Tests
         [InlineData(7)]
         [InlineData(10)]
         [InlineData(60)]
+        [InlineData(150)]
         public void MultipleFiles(int filesCount)
         {
             var random = new Random();
