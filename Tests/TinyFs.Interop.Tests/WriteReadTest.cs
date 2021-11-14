@@ -70,6 +70,7 @@ namespace TinyFs.Interop.Tests
         [InlineData(10)]
         [InlineData(60)]
         [InlineData(150)]
+        [InlineData(200)]
         public void MultipleFiles(int filesCount)
         {
             var random = new Random();
