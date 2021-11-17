@@ -684,19 +684,6 @@ namespace TinyFs.Interop
             throw new Exception("No free descriptor found");
         }
 
-        private int GetFirstFreeBlock()
-        {
-            var takeBytes = 16;
-            for (short i = 0; i < FileSystemSettings.BlocksCount / 8 / 16; i++)
-            {
-                var bitmask = GetBitmask(i * takeBytes, takeBytes);
-                var firstFree = bitmask.GetIndexOfFirst(FileSystemSettings.BitmaskFreeBit);
-                return i * takeBytes * 8 + firstFree;
-            }
-
-            throw new Exception("No free block found");
-        }
-
         private ushort GetFirstFreeBlockAndReserve()
         {
             short takeBytes = 16;
@@ -781,86 +768,6 @@ namespace TinyFs.Interop
             var byteArr = newEntry.ToByteArray();
             byteArr.CopyTo(block.Data, entryIndex * SizeHelper.GetStructureSize<DirectoryEntry>());
             SetBlock(blockId, block);
-        }
-
-        private byte[] ReadFileMapEntries(ushort fileMapIndex, int offset, ushort fileSize, int? totalBlocks = null)
-        {
-            var result = new byte[fileSize];
-            totalBlocks ??= OpHelper.DivWithRoundUp(fileSize, FileSystemSettings.BlockSize);
-            var blocksToRead = totalBlocks > FileSystemSettings.RefsInFileMap
-                ? FileSystemSettings.RefsInFileMap
-                : totalBlocks.Value;
-            var fileMap = GetFileMap(fileMapIndex);
-            var blockIndexes =
-                FsFileStream.ReadStructs<ushort>(GetBlockOffset(fileMapIndex), FileSystemSettings.RefsInFileMap)
-                    .Skip(offset)
-                    .ToList();
-            for (var i = 0; i < blocksToRead; i++)
-            {
-                var bytesToRead = fileSize - i * FileSystemSettings.BlockSize >= FileSystemSettings.BlockSize
-                    ? FileSystemSettings.BlockSize
-                    : fileSize - i * FileSystemSettings.BlockSize;
-                var block = GetBlock(blockIndexes[i]);
-                block.Data.Take(bytesToRead).ToArray().CopyTo(result, i * FileSystemSettings.BlockSize);
-            }
-
-            if (blocksToRead < totalBlocks)
-            {
-                ReadFileMapEntries(fileMap.NextMapIndex,
-                        0,
-                        Convert.ToUInt16(fileSize - FileSystemSettings.BlockSize * blocksToRead),
-                        totalBlocks - FileSystemSettings.BlockSize)
-                    .CopyTo(result, blocksToRead * FileSystemSettings.BlockSize);
-            }
-
-            return result;
-        }
-
-        private byte[] ReadFileMapEntries(ushort fileMapIndex, int offset, int count)
-        {
-            if (offset > FileSystemSettings.RefsInFileMap)
-            {
-                throw new Exception("offset is too big");
-            }
-
-            var result = new byte[FileSystemSettings.BlockSize * count];
-            var fileMap = GetFileMap(fileMapIndex);
-            var blockIndexes =
-                FsFileStream.ReadStructs<ushort>(GetBlockOffset(fileMapIndex), FileSystemSettings.RefsInFileMap)
-                    .Skip(offset)
-                    .Take(count)
-                    .ToList();
-            for (var i = 0; i < FileSystemSettings.RefsInFileMap - offset && i < count; i++)
-            {
-                var block = GetBlock(blockIndexes[i]);
-                block.Data.CopyTo(result, i * FileSystemSettings.BlockSize);
-            }
-
-            if (FileSystemSettings.RefsInFileMap - offset < count)
-            {
-                ReadFileMapEntries(fileMap.NextMapIndex,
-                        0,
-                        count - (FileSystemSettings.RefsInFileMap - offset))
-                    .CopyTo(result, FileSystemSettings.BlockSize * offset - FileSystemSettings.RefsInFileMap);
-            }
-
-            return result;
-        }
-
-        private ( ushort fileId, ushort directoryId ) FileLookUpWithDirectory(string fileName)
-        {
-            var filesCount = Root.FileSize / SizeHelper.GetStructureSize<DirectoryEntry>();
-            try
-            {
-                return new ValueTuple<ushort, ushort>(FsFileStream
-                    .ReadStructs<DirectoryEntry>(SizeHelper.GetBlocksOffset(_descriptorsCount), filesCount)
-                    .Single(de => de.Name == fileName)
-                    .FileDescriptorId, 0);
-            }
-            catch (Exception e)
-            {
-                throw new Exception($"File with name {fileName} not found");
-            }
         }
 
         private void RemoveFileFromFs(ushort fileDescriptorId)
