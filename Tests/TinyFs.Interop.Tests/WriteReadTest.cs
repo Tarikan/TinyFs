@@ -175,12 +175,12 @@ namespace TinyFs.Interop.Tests
             var fd = _fs.OpenFile("test");
             _fs.WriteToFile(file, fd, offset, Convert.ToUInt16(file.Length));
             _fs.CloseFile(fd);
-            var descriptor = _fs.GetFileDescriptor(2);
+            var descriptor = _fs.GetFileDescriptor(1);
             var json = JsonSerializer.Serialize(
                 descriptor,
                 new JsonSerializerOptions { WriteIndented = true, IncludeFields = true});
             _testOutputHelper.WriteLine(json);
-            Assert.True(descriptor.Id == 2 &&
+            Assert.True(descriptor.Id == 1 &&
                         descriptor.References == 1 &&
                         descriptor.FileDescriptorType == FileDescriptorType.File);
         }
@@ -203,7 +203,7 @@ namespace TinyFs.Interop.Tests
             _fs.CreateFile("file");
             _fs.Truncate("file", 9876);
             _fs.Truncate("file", 6543);
-            var descriptor = _fs.GetFileDescriptor(2);
+            var descriptor = _fs.GetFileDescriptor(1);
             Assert.True(descriptor.FileSize == 6543);
         }
 
@@ -212,7 +212,7 @@ namespace TinyFs.Interop.Tests
         {
             _fs.CreateFile("test");
             var descriptor = _fs.LookUp("test");
-            Assert.True(descriptor.Id == 2);
+            Assert.True(descriptor.Id == 1);
         }
 
         [Fact]

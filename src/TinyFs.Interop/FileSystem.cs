@@ -20,8 +20,8 @@ namespace TinyFs.Interop
         private readonly int _fsSize;
         private FileDescriptor Root => GetFileDescriptor(0);
 
-        // private ICollection<FileDescriptor> Descriptors =>
-        //     FsFileStream.ReadStructs<FileDescriptor>(FileSystemSettings.DescriptorsOffset, _descriptorsCount);
+        private ICollection<FileDescriptor> Descriptors =>
+            FsFileStream.ReadStructs<FileDescriptor>(FileSystemSettings.DescriptorsOffset, _descriptorsCount);
 
         // private ICollection<FileMap> FileMaps =>
         //     FsFileStream.ReadStructs<FileMap>(SizeHelper.GetBlocksOffset(_descriptorsCount),
@@ -1202,23 +1202,7 @@ namespace TinyFs.Interop
             var rootDirBlock = GetBlock(FileSystemSettings.NullDescriptor);
             Encoding.Default.GetBytes(FileSystemSettings.Separator).CopyTo(rootDirBlock.Data, 0);
             SetBlock(rootDirBlockId, rootDirBlock);
-            var rootDir = new FileDescriptor
-            {
-                Id = 1,
-                FileDescriptorType = FileDescriptorType.Symlink,
-                FileSize = Convert.ToUInt16(FileSystemSettings.CurrentDirHardlink.Length),
-                References = 1,
-                Blocks = new ushort[]
-                {
-                    rootDirBlockId,
-                    FileSystemSettings.NullDescriptor,
-                    FileSystemSettings.NullDescriptor,
-                    FileSystemSettings.NullDescriptor,
-                },
-                MapIndex = 0
-            };
-            SetFileDescriptor(rootDir.Id, rootDir);
-            AddLinkToDirectory(0, FileSystemSettings.CurrentDirHardlink, 1);
+            AddLinkToDirectory(0, FileSystemSettings.CurrentDirHardlink, 0);
         }
     }
 }
