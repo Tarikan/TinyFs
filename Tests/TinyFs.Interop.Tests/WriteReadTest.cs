@@ -253,5 +253,16 @@ namespace TinyFs.Interop.Tests
             var ls = _fs.DirectoryList();
             Assert.DoesNotContain(ls, de => de.Name == "test" && de.IsValid);
         }
+
+        [Fact]
+        public void MkDirReference()
+        {
+            _fs.MakeDirectory("dir");
+            _fs.CreateFile("/dir/file1");
+            _fs.CreateSymlink("/dir/file2", "/dir/file1");
+            _fs.UnlinkFile("/dir/file2");
+            var descriptor = _fs.GetFileDescriptor(3);
+            Assert.True(descriptor.References == 1);
+        }
     }
 }

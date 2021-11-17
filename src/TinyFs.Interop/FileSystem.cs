@@ -362,7 +362,7 @@ namespace TinyFs.Interop
 
         public override void UnlinkFile(string filename, ushort cwd = 0)
         {
-            var descriptor = LookUp(filename, cwd);
+            var descriptor = LookUp(filename, cwd, false);
             // var dirPath = filename[..filename.LastIndexOf(FileSystemSettings.Separator, StringComparison.Ordinal)];
             var dirPath = PathHelper.GetDirectoryByPath(filename);
             var directory = LookUp(dirPath, cwd);
