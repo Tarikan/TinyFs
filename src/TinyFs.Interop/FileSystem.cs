@@ -545,8 +545,8 @@ namespace TinyFs.Interop
 
             var directoryEntries = GetDirectoryEntries(fileDescriptor.Id).SelectMany(x => x);
             if (directoryEntries.Any(
-                de => de.Name != FileSystemSettings.CurrentDirSymlink &&
-                      de.Name != FileSystemSettings.PrevDirSymlink &&
+                de => de.Name != FileSystemSettings.CurrentDirHardlink &&
+                      de.Name != FileSystemSettings.PrevDirHardlink &&
                       de.IsValid))
             {
                 throw new Exception("Directory is not empty");
@@ -1206,7 +1206,7 @@ namespace TinyFs.Interop
             {
                 Id = 1,
                 FileDescriptorType = FileDescriptorType.Symlink,
-                FileSize = Convert.ToUInt16(FileSystemSettings.CurrentDirSymlink.Length),
+                FileSize = Convert.ToUInt16(FileSystemSettings.CurrentDirHardlink.Length),
                 References = 1,
                 Blocks = new ushort[]
                 {
@@ -1218,7 +1218,7 @@ namespace TinyFs.Interop
                 MapIndex = 0
             };
             SetFileDescriptor(rootDir.Id, rootDir);
-            AddLinkToDirectory(0, FileSystemSettings.CurrentDirSymlink, 1);
+            AddLinkToDirectory(0, FileSystemSettings.CurrentDirHardlink, 1);
         }
     }
 }

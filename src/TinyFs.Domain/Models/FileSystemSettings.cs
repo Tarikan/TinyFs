@@ -30,8 +30,8 @@
 
         public const string Separator = "/";
 
-        public const string CurrentDirSymlink = ".";
+        public const string CurrentDirHardlink = ".";
         
-        public const string PrevDirSymlink = "..";
+        public const string PrevDirHardlink = "..";
     }
 }
